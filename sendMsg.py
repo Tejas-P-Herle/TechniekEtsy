@@ -49,14 +49,14 @@ def main():
     driver.execute_script('document.querySelector("button[name=\'submit_attempt\']").click()')
 
     wait.until(EC.visibility_of_element_located((By.CSS_SELECTOR, '.welcome-message-text')))
-    print("DONE")
+    print("Logged IN")
     for i, page in enumerate(seller_pages):
         driver.get(page)
         driver.execute_script('document.querySelector("#desktop_shop_owners_parent").querySelector("a.wt-btn.wt-btn--outline.wt-width-full.contact-action.convo-overlay-trigger.inline-overlay-trigger").click()')
         wait.until(EC.visibility_of_element_located((By.CSS_SELECTOR, "textarea[placeholder='Write a message']")))
         mod_message = messages[i]
         driver.execute_script(f'document.querySelector("textarea[placeholder=\'Write a message\']").value = "{mod_message}"')
-        print(f"Send Message: {mod_message} to {page}")
+        print(f"Send Message: '{mod_message}' to {page}")
         input("Click ENTER to goto next page")
 
     driver.close()
