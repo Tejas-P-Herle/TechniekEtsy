@@ -1,6 +1,8 @@
 
 import openpyxl
 import time
+import sys
+import pathlib
 
 from selenium import webdriver
 
@@ -12,12 +14,12 @@ from selenium.webdriver.chrome.options import Options
 
 class MsgSender:
 
-    def __init__(self, filepath, username, password, url_col, msg_template,
+    def __init__(self, filepath, username, password, msg_template,
             start_num, num_msg):
 
         self.username = username
         self.password = password
-        self.url_col = url_col
+        # self.url_col = url_col
         self.msg_template = msg_template
         self.start_num = start_num
         self.num_msg = num_msg
@@ -26,7 +28,12 @@ class MsgSender:
         self.sheet_obj = wb_obj.active
 
         chrome_options = Options()
-        chrome_options.add_argument("user-data-dir=selenium")
+        if sys.platform == "linux":
+            chrome_options.add_argument("user-data-dir=selenium")
+        else:
+            script_dir = pathlib.Path().absolute()
+            chrome_options.add_argument("user-data-dir={script_dir}\\selenium")
+
         self.driver = webdriver.Chrome(options=chrome_options)
 
     def get_sellers(self):
@@ -34,13 +41,25 @@ class MsgSender:
         max_i = i + self.num_msg
         urls = []
         messages = []
-        while self.sheet_obj.cell(row=i, column=self.url_col).value:
-            url = self.sheet_obj.cell(row=i, column=self.url_col).value
+        url_col = 2
+
+        for i in range(2, 100):
+            col_val = self.sheet_obj.cell(row=2, column=i).value
+            print("COL VAL", col_val)
+            if col_val and "etsy.com" in col_val:
+                if (col_val.startswith("http") or col_val.startwith("www")
+                        or col_val.startswith("etsy")):
+                    url_col = i
+                    break
+        print("URL COL", url_col)
+                
+        while self.sheet_obj.cell(row=i, column=url_col).value:
+            url = self.sheet_obj.cell(row=i, column=url_col).value
             params = []
             j = 1
-            while self.sheet_obj.cell(row=i, column=self.url_col + j).value:
+            while self.sheet_obj.cell(row=i, column=url_col + j).value:
                 params.append(self.sheet_obj.cell(
-                    row=i, column=self.url_col + j).value)
+                    row=i, column=url_col + j).value)
                 j += 1
                 
             # message = self.sheet_obj.cell(row=i, column=msg_col).value
@@ -67,6 +86,7 @@ class MsgSender:
 
 
     def set_textarea(self, selector, value):
+        value = value.replace('"', '\\"').replace("'", "\\'")
         self.safe_evaluate(
             "var valSetter=Object.getOwnPropertyDescriptor("
             "window.HTMLTextAreaElement.prototype, 'value').set;"
@@ -105,7 +125,11 @@ class MsgSender:
         for i, page in enumerate(seller_pages):
             print("GET Page -", "'" + page + "'")
             driver.get(page)
-            driver.execute_script('document.querySelector("#desktop_shop_owners_parent").querySelector("a.wt-btn.wt-btn--outline.wt-width-full.contact-action.convo-overlay-trigger.inline-overlay-trigger").click()')
+            # driver.execute_script('document.querySelector("#desktop_shop_owners_parent").querySelector("a.wt-btn.wt-btn--outline.wt-width-full.contact-action.convo-overlay-trigger.inline-overlay-trigger").click()')
+            wait.until(EC.visibility_of_element_located((By.CSS_SELECTOR, 'a.contact-action')))
+            # driver.execute_script('document.querySelector("a.contact-action").querySelector("a.wt-btn.wt-btn--outline.wt-width-full.contact-action.convo-overlay-trigger.inline-overlay-trigger").click()')
+
+            driver.execute_script("document.querySelector('div.shop-owner-small-screens').querySelector('a.contact-action').click()")
             wait.until(EC.visibility_of_element_located((By.CSS_SELECTOR,
                 "textarea[placeholder='Write a message']")))
             
@@ -120,8 +144,8 @@ class MsgSender:
                 return 1
                 
             print(f"Send Message: '{mod_message}' to {page}")
-            time.sleep(5)
             driver.execute_script(f'document.querySelector("button.cheact-arrow-container").click()')
+            time.sleep(2)
             # input("Click ENTER to goto next page")
         
         driver.close()

@@ -38,9 +38,8 @@ class Application(Frame):
         sel_label = self.add_label("Select Excel File:")
         filepath_entry = self.add_entry()
         load_button = self.add_button("Select", lambda: self.setExcelFile(filepath_entry))
-        url_col_label = self.add_label("URL Column", same_row=True)
-        url_col_entry = self.add_entry(width=col1_ewidth, column=1,
-            num_only=True, default=2)
+        # url_col_label = self.add_label("URL Column", same_row=True)
+        # url_col_entry = self.add_entry(width=col1_ewidth, column=1, num_only=True, default=2)
         msg_label = self.add_label("Enter Message:", columnspan=2)
         
         # message_box = Text(self, height = 5, width = 52)
@@ -56,14 +55,14 @@ class Application(Frame):
 
         username_label = self.add_label("Email ID(If not logged in)",
             same_row=True)
-        username_entry = self.add_entry(width=col1_ewidth, column=1,
-            default="yifefa3387@introace.com")
+        username_entry = self.add_entry(width=col1_ewidth, column=1)
+            # default="yifefa3387@introace.com")
         password_label = self.add_label("Password(If not logged in)",
             same_row=True)
-        password_entry = self.add_entry(width=col1_ewidth, column=1, show="*",
-            default="Task@Internshala")
+        password_entry = self.add_entry(width=col1_ewidth, column=1, show="*")
+            # default="Task@Internshala")
 
-        input_fields = {'filepath': filepath_entry, 'url_col': url_col_entry,
+        input_fields = {'filepath': filepath_entry, # 'url_col': url_col_entry,
             'msg_template': message_box, 'start_num': start_num_entry,
             'num_msg': num_msg_entry, 'username': username_entry,
             'password': password_entry}
@@ -150,8 +149,8 @@ class Application(Frame):
             for field_name, widget in input_fields.items()}
         print("input_values", input_values)
         
-        if not input_values["url_col"]:
-            input_values["url_col"] = 2
+        # if not input_values["url_col"]:
+        #     input_values["url_col"] = 2
         
         if not input_values["start_num"]:
             input_values["start_num"] = 1
