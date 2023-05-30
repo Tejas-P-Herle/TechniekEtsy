@@ -2,6 +2,7 @@
 from tkinter import *
 from tkinter.filedialog import askopenfilename
 
+from os import path
 
 from msg_sender import MsgSender
 
@@ -48,15 +49,15 @@ class Application(Frame):
 
         start_label = self.add_label("Starting URL Offset", same_row=True)
         start_num_entry = self.add_entry(width=col1_ewidth, column=1,
-            num_only=True, default=0)
+            num_only=True, default=1)
         num_label = self.add_label("Number of Messages", same_row=True)
         num_msg_entry = self.add_entry(width=col1_ewidth, column=1,
-            num_only=True, default=100)
+            num_only=True, default=3)
 
-        username_label = self.add_label("Username(If not logged in)",
+        username_label = self.add_label("Email ID(If not logged in)",
             same_row=True)
         username_entry = self.add_entry(width=col1_ewidth, column=1,
-            default="InternshalaTask")
+            default="yifefa3387@introace.com")
         password_label = self.add_label("Password(If not logged in)",
             same_row=True)
         password_entry = self.add_entry(width=col1_ewidth, column=1, show="*",
@@ -148,8 +149,35 @@ class Application(Frame):
         input_values = {field_name: getValue(widget)
             for field_name, widget in input_fields.items()}
         print("input_values", input_values)
+        
+        if not input_values["url_col"]:
+            input_values["url_col"] = 2
+        
+        if not input_values["start_num"]:
+            input_values["start_num"] = 1
+        
+        if not input_values["num_msg"]:
+            input_values["num_msg"] = 100
+
+        if not input_values["filepath"] or not path.exists(input_values["filepath"]):
+            self.status_label.config(text="Status: Invalid filepath")
+            print("Invalid FilePath")
+            return
+
+        if not input_values["msg_template"]:
+            self.status_label.config(text="Status: Empty Message")
+            print("Empty Message")
+            return
+
         msg_sender = MsgSender(**input_values)
-        msg_sender.start_sending()
-        self.status_label.config(text="Status: Sent Messages")
-        print("DONE")
+        error = msg_sender.start_sending()
+        if error == 0:
+            self.status_label.config(text="Status: Sent Messages")
+            print("DONE")
+        elif error == 1:
+            self.status_label.config(text="Status: FAILED BROWSER CLOSED")
+            print("Browser Closed")
+        else:
+            self.status_label.config(text="Status: FAILED UNKNOWN ERROR")
+            print("FAILED")
 

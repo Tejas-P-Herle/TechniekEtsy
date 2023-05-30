@@ -1,5 +1,6 @@
 
 import openpyxl
+import time
 
 from selenium import webdriver
 
@@ -29,7 +30,8 @@ class MsgSender:
         self.driver = webdriver.Chrome(options=chrome_options)
 
     def get_sellers(self):
-        i = 2
+        i = self.start_num + 1
+        max_i = i + self.num_msg
         urls = []
         messages = []
         while self.sheet_obj.cell(row=i, column=self.url_col).value:
@@ -48,21 +50,37 @@ class MsgSender:
             urls.append(url)
             messages.append(message)
             i += 1
+            if i >= max_i:
+                break
         return urls, messages
-
+    
+    def safe_evaluate(self, script, tries=1):
+        while tries > 0:
+            try:
+                return self.driver.execute_script(script)
+            except Exception as err:
+                print("Evaluation Error:", err)
+            tries -= 1
 
     def is_captcha_solved(self):
-        return self.driver.execute_script('return (typeof grecaptcha !== "undefined") && grecaptcha && grecaptcha.enterprise?.getResponse().length > 0')
+        return self.safe_evaluate('return (typeof grecaptcha !== "undefined") && grecaptcha && grecaptcha.enterprise?.getResponse().length > 0')
 
 
     def set_textarea(self, selector, value):
-        self.driver.execute_script(
+        self.safe_evaluate(
             "var valSetter=Object.getOwnPropertyDescriptor("
             "window.HTMLTextAreaElement.prototype, 'value').set;"
             f"var input = document.querySelector('{selector}');"
             f"valSetter.call(input,'{value}');"
             "var ev = new Event('input',{bubbles:true});"
-            "input.dispatchEvent(ev);")
+            "input.dispatchEvent(ev);", 3)
+
+    def is_browser_open(self):
+        try:
+            self.driver.current_url
+            return True
+        except:
+            return False
 
     def start_sending(self):
         seller_pages, messages = self.get_sellers()
@@ -72,14 +90,14 @@ class MsgSender:
 
         wait = WebDriverWait(driver, 180)
 
-        if not driver.execute_script('return document.querySelector(".welcome-message-text")'):
+        if not self.safe_evaluate('return document.querySelector(".welcome-message-text")', 3):
             
             print("NO Login History")
             driver.execute_script('document.querySelector("button.select-signin").click()')
             wait.until(EC.visibility_of_element_located((By.CSS_SELECTOR, '#join_neu_email_field')))
 
-            driver.execute_script(f'document.querySelector("#join_neu_email_field").value = "{email}"')
-            driver.execute_script(f'document.querySelector("#join_neu_password_field").value = "{password}"')
+            driver.execute_script(f'document.querySelector("#join_neu_email_field").value = "{self.username}"')
+            driver.execute_script(f'document.querySelector("#join_neu_password_field").value = "{self.password}"')
             driver.execute_script('document.querySelector("button[name=\'submit_attempt\']").click()')
 
             wait.until(EC.visibility_of_element_located((By.CSS_SELECTOR, '.welcome-message-text')))
@@ -88,22 +106,24 @@ class MsgSender:
             print("GET Page -", "'" + page + "'")
             driver.get(page)
             driver.execute_script('document.querySelector("#desktop_shop_owners_parent").querySelector("a.wt-btn.wt-btn--outline.wt-width-full.contact-action.convo-overlay-trigger.inline-overlay-trigger").click()')
-            wait.until(EC.visibility_of_element_located((By.CSS_SELECTOR, "textarea[placeholder='Write a message']")))
-            mod_message = messages[i]
-            # driver.execute_script(f'document.querySelector(").value = "{mod_message}"')
+            wait.until(EC.visibility_of_element_located((By.CSS_SELECTOR,
+                "textarea[placeholder='Write a message']")))
             
+            mod_message = messages[i]
             value = mod_message
             self.set_textarea('textarea[placeholder="Write a message"]', value)
 
-            # while not is_captcha_solved(driver):
-                # driver.execute_script(f'document.querySelector("textarea[placeholder=\'Write a message\']").value = "{mod_message}"')
-            while not self.is_captcha_solved():
+            while not self.is_captcha_solved() and self.is_browser_open():
                 self.set_textarea('textarea[placeholder="Write a message"]', value)
-                # pass
+
+            if not self.is_browser_open():
+                return 1
                 
             print(f"Send Message: '{mod_message}' to {page}")
-            # driver.execute_script(f'document.querySelector("button.cheact-arrow-container").click()')
+            time.sleep(5)
+            driver.execute_script(f'document.querySelector("button.cheact-arrow-container").click()')
             # input("Click ENTER to goto next page")
         
         driver.close()
+        return 0
 
