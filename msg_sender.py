@@ -79,10 +79,12 @@ class MsgSender:
                 return self.driver.execute_script(script)
             except Exception as err:
                 print("Evaluation Error:", err)
+                if "Alert Text" in str(err):
+                    tries += 1
             tries -= 1
 
     def is_captcha_solved(self):
-        return self.safe_evaluate('return (typeof grecaptcha !== "undefined") && grecaptcha && grecaptcha.enterprise?.getResponse().length > 0')
+        return self.safe_evaluate('return (typeof grecaptcha !== "undefined") && grecaptcha && grecaptcha.enterprise?.getResponse().length > 0', tries=3)
 
 
     def set_textarea(self, selector, value):
@@ -98,7 +100,7 @@ class MsgSender:
     def is_browser_open(self):
         try:
             self.driver.current_url
-            return True
+            return EC.alert_is_present() 
         except:
             return False
 
@@ -118,7 +120,8 @@ class MsgSender:
 
             driver.execute_script(f'document.querySelector("#join_neu_email_field").value = "{self.username}"')
             driver.execute_script(f'document.querySelector("#join_neu_password_field").value = "{self.password}"')
-            driver.execute_script('document.querySelector("button[name=\'submit_attempt\']").click()')
+            if self.password.strip() and self.username.strip():
+                driver.execute_script('document.querySelector("button[name=\'submit_attempt\']").click()')
 
             wait.until(EC.visibility_of_element_located((By.CSS_SELECTOR, '.welcome-message-text')))
         print("Logged IN")
@@ -126,7 +129,17 @@ class MsgSender:
             print("GET Page -", "'" + page + "'")
             driver.get(page)
             # driver.execute_script('document.querySelector("#desktop_shop_owners_parent").querySelector("a.wt-btn.wt-btn--outline.wt-width-full.contact-action.convo-overlay-trigger.inline-overlay-trigger").click()')
-            wait.until(EC.visibility_of_element_located((By.CSS_SELECTOR, 'a.contact-action')))
+            # wait.until(EC.visibility_of_element_located((By.CSS_SELECTOR, 'a.contact-action')))
+            no_msg_btn = False
+            while self.safe_evaluate("return document.querySelector('a.contact-action')") is None and self.is_browser_open():
+                if self.safe_evaluate("return document.querySelector('div[data-region=\"frozen-message\"]')"):
+                    print("No Message Button")
+                    no_msg_btn = True
+                    break
+            if no_msg_btn:
+                continue
+            print("Message Button Present")
+
             # driver.execute_script('document.querySelector("a.contact-action").querySelector("a.wt-btn.wt-btn--outline.wt-width-full.contact-action.convo-overlay-trigger.inline-overlay-trigger").click()')
 
             driver.execute_script("document.querySelector('div.shop-owner-small-screens').querySelector('a.contact-action').click()")
@@ -144,7 +157,7 @@ class MsgSender:
                 return 1
                 
             print(f"Send Message: '{mod_message}' to {page}")
-            driver.execute_script(f'document.querySelector("button.cheact-arrow-container").click()')
+            # driver.execute_script(f'document.querySelector("button.cheact-arrow-container").click()')
             time.sleep(2)
             # input("Click ENTER to goto next page")
         
