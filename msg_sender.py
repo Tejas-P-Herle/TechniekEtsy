@@ -32,7 +32,7 @@ class MsgSender:
             chrome_options.add_argument("user-data-dir=selenium")
         else:
             script_dir = pathlib.Path().absolute()
-            chrome_options.add_argument("user-data-dir={script_dir}\\selenium")
+            chrome_options.add_argument(f"user-data-dir={script_dir}\\selenium")
 
         self.driver = webdriver.Chrome(options=chrome_options)
 
@@ -43,13 +43,13 @@ class MsgSender:
         messages = []
         url_col = 2
 
-        for i in range(2, 100):
-            col_val = self.sheet_obj.cell(row=2, column=i).value
+        for k in range(2, 100):
+            col_val = self.sheet_obj.cell(row=2, column=k).value
             print("COL VAL", col_val)
             if col_val and "etsy.com" in col_val:
                 if (col_val.startswith("http") or col_val.startwith("www")
                         or col_val.startswith("etsy")):
-                    url_col = i
+                    url_col = k
                     break
         print("URL COL", url_col)
                 
