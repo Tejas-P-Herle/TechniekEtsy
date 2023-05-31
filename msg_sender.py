@@ -3,6 +3,7 @@ import openpyxl
 import time
 import sys
 import pathlib
+import requests
 
 from selenium import webdriver
 
@@ -10,6 +11,18 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.chrome.options import Options
+
+
+message_request = {
+    "subject":"hi",
+    "message":"hi",
+    "attachments":"{}",
+    "recipient_loginname":"Dasosmijewels",
+    "recipient_id":null,
+    "captcha_code":"g-recaptcha-convos-compose-64760dac1e61a",
+    "g-recaptcha-response":"",
+    "api_context":"buyer_conversations"
+}
 
 
 class MsgSender:
@@ -40,6 +53,7 @@ class MsgSender:
         i = self.start_num + 1
         max_i = i + self.num_msg
         urls = []
+        names = []
         messages = []
         url_col = 2
 
@@ -67,11 +81,12 @@ class MsgSender:
             params += ['' * 1000]
             message = self.msg_template.format(*params)
             urls.append(url)
+            names.append(urls.rsplit("/", 1)[-1])
             messages.append(message)
             i += 1
             if i >= max_i:
                 break
-        return urls, messages
+        return urls, names, messages
     
     def safe_evaluate(self, script, tries=1):
         while tries > 0:
@@ -105,7 +120,7 @@ class MsgSender:
             return False
 
     def start_sending(self):
-        seller_pages, messages = self.get_sellers()
+        seller_pages, seller_names, messages = self.get_sellers()
 
         driver = self.driver
         driver.get("https://www.etsy.com")
@@ -125,41 +140,9 @@ class MsgSender:
 
             wait.until(EC.visibility_of_element_located((By.CSS_SELECTOR, '.welcome-message-text')))
         print("Logged IN")
-        for i, page in enumerate(seller_pages):
-            print("GET Page -", "'" + page + "'")
-            driver.get(page)
-            # driver.execute_script('document.querySelector("#desktop_shop_owners_parent").querySelector("a.wt-btn.wt-btn--outline.wt-width-full.contact-action.convo-overlay-trigger.inline-overlay-trigger").click()')
-            # wait.until(EC.visibility_of_element_located((By.CSS_SELECTOR, 'a.contact-action')))
-            no_msg_btn = False
-            while self.safe_evaluate("return document.querySelector('a.contact-action')") is None and self.is_browser_open():
-                if self.safe_evaluate("return document.querySelector('div[data-region=\"frozen-message\"]')"):
-                    print("No Message Button")
-                    no_msg_btn = True
-                    break
-            if no_msg_btn:
-                continue
-            print("Message Button Present")
 
-            # driver.execute_script('document.querySelector("a.contact-action").querySelector("a.wt-btn.wt-btn--outline.wt-width-full.contact-action.convo-overlay-trigger.inline-overlay-trigger").click()')
+        driver.get("
 
-            driver.execute_script("document.querySelector('div.shop-owner-small-screens').querySelector('a.contact-action').click()")
-            wait.until(EC.visibility_of_element_located((By.CSS_SELECTOR,
-                "textarea[placeholder='Write a message']")))
-            
-            mod_message = messages[i]
-            value = mod_message
-            self.set_textarea('textarea[placeholder="Write a message"]', value)
-
-            while not self.is_captcha_solved() and self.is_browser_open():
-                self.set_textarea('textarea[placeholder="Write a message"]', value)
-
-            if not self.is_browser_open():
-                return 1
-                
-            print(f"Send Message: '{mod_message}' to {page}")
-            # driver.execute_script(f'document.querySelector("button.cheact-arrow-container").click()')
-            time.sleep(2)
-            # input("Click ENTER to goto next page")
         
         driver.close()
         return 0
