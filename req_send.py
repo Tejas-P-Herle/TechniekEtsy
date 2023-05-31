@@ -2,6 +2,7 @@
 
 import openpyxl
 import time
+import os
 
 from tkinter import *
 from os import path
@@ -11,6 +12,10 @@ import requests
 import grequests
 import json
 import sys
+import subprocess
+import signal
+
+from subprocess import PIPE
 
 from lxml.html import fromstring
 from selenium import webdriver
@@ -21,38 +26,47 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.chrome.options import Options
 
 
+returncode = subprocess.call(["sudo", "echo", "HI"])
+
+
 cookies = {}
 csrf_token = ""
 page_guid = ""
 
-# filepath = "sellers_names.xlsx"
-# filepath = input("Filepath(sellers_names.xlsx): ")
-# if not filepath.strip():
-#     filepath = "sellers_names.xlsx"
-# 
-# message_file = input("Message File(Default Message - 'Hi'): ")
-# if not message_file.strip():
-#     message = "HI"
-# else:
-#     with open(message_file) as file:
-#         message = file.read()
-# 
-# message = message.replace('"', '\\"').replace("'", "\\'")
-# print("Message", message)
-# num_msg = 20
-filepath = ""
-message = "HI"
+input_ok = False
+
+filepath = "sellers_names.xlsx"
+filepath = input("Filepath(sellers_names.xlsx): ")
+if not filepath.strip():
+    filepath = "sellers_names.xlsx"
+
+message_file = input("Message File(Default Message - 'Hi'): ")
+if not message_file.strip():
+    message = "HI"
+else:
+    with open(message_file) as file:
+        message = file.read()
+
+message = message.replace('"', '\\"').replace("'", "\\'")
+
+input_ok = True
+print("Message", message)
+num_msg = 20
+# filepath = ""
+# message = "HI"
 
 
 batch_size = 30
 TIMEOUT=20
 
-sleep_time = 0
+sleep_time = 30
 row = 0
 
-input_ok = False
-
 contacted_sellers = set()
+
+ovpn_files = []
+messages_left = 0
+max_session_msg = 3
 
 
 def set_cookies(driver):
@@ -74,20 +88,23 @@ def set_codes(driver):
 
 
 def get_captcha(driver):
-    return driver.execute_async_script("""
-        async function getParams() {
-          let resp = await fetch("https://www.etsy.com/api/v3/ajax/member/conversations/recaptcha-data");
-          let respJson = await resp.json();
+    try:
+        return driver.execute_async_script("""
+            async function getParams() {
+              let resp = await fetch("https://www.etsy.com/api/v3/ajax/member/conversations/recaptcha-data");
+              let respJson = await resp.json();
 
-          let captcha_code = respJson["id"];
-            
-          gresp = grecaptcha.enterprise.getResponse();
-          
-          return [captcha_code, gresp]
-        }
-        params = getParams()
-        params.then(resp => arguments[0](resp))
-    """)
+              let captcha_code = respJson["id"];
+                
+              gresp = grecaptcha.enterprise.getResponse();
+              
+              return [captcha_code, gresp]
+            }
+            params = getParams()
+            params.then(resp => arguments[0](resp))
+        """)
+    except:
+        return "", ""
 
     
 def sendMsgCore(user, message, captcha_code, recaptchaResp, timeout=TIMEOUT):
@@ -219,10 +236,10 @@ def is_captcha_solved(driver):
 
 def is_browser_open(driver):
    try:
-       driver.current_url
-       return EC.alert_is_present()
+        driver.window_handles
+        return True
    except:
-       return False
+        return False
 
 
 def get_sellers(sheet_obj):
@@ -237,11 +254,11 @@ def get_sellers(sheet_obj):
         if "Seller" in col_val or "Name" in col_val:
             seller_col = k
             break
-
-    while sheet_obj.cell(row=i, column=seller_col).value:
-        seller = sheet_obj.cell(row=i, column=seller_col).value
-        sellers.append(seller)
-        i += 1
+    
+    for k in range(i, max_i):
+        if sheet_obj.cell(row=k, column=seller_col).value:
+            seller = sheet_obj.cell(row=k, column=seller_col).value
+            sellers.append(seller)
     return sellers
 
 
@@ -350,10 +367,64 @@ def start_sending(root, input_fields):
     root.destroy()
 
 
-def main():
-    global driver, status_label, row
+def load_ovpns():
+    global ovpn_files
+    for file in os.listdir("vpns"):
+        if file.endswith(".ovpn"):
+            ovpn_files.append(file)
+    ovpn_files = sorted(ovpn_files)
+    print("ovpn files", ovpn_files)
 
-    root = Tk()
+
+def kill_all_vpns():
+    p = subprocess.Popen(['sudo', 'killall', 'openvpn'],
+            stdout=PIPE, stdin=PIPE, stderr=PIPE)
+
+def get_ip():
+    try:
+        return requests.get("https://api.ipify.org/", timeout=5).text
+    except:
+        return None
+    
+
+def rotate_vpn():
+    print("Rotate VPN")
+    while True:
+        print("Load OVPN")
+        load_ovpns()
+        print("Done Loading")
+        prev_ip = get_ip()
+        for vpn in ovpn_files:
+            print("Connecting to VPN")
+            p = subprocess.Popen(['sudo', 'openvpn', "vpns/" + vpn],
+                stdin=PIPE, stderr=PIPE) #, stdout=PIPE)
+            resp = None
+            count = 20
+            retry = False
+            while not resp or resp == prev_ip:
+                time.sleep(1)
+                resp = get_ip()
+                count -= 1
+                if count == 0:
+                    retry = True
+                    break
+                print("RESP", resp)
+
+            if retry:
+                kill_all_vpns()
+                continue
+            
+            print("Connected, ip", resp)
+            yield
+
+            # prev_ip = get_ip()
+            prev_ip = None
+            kill_all_vpns()
+            print("VPN Closed")
+
+def build_app(root):
+    global row
+
     root.title("Techneik Etsy Messenger")
     
     heading_label = add_label(root, "Etsy Auto-Messenger", columnspan=2, font=24)
@@ -381,7 +452,32 @@ def main():
         column=0, columnspan=2, padx=5, pady=5)
 
 
-    root.mainloop()
+def open_browser(chrome_options):
+    driver = webdriver.Chrome(options=chrome_options)
+
+    driver.get("https://www.etsy.com/messages/sent")
+    wait = WebDriverWait(driver, 1800)
+    print("Loaded, Searching for button")
+    waitS = WebDriverWait(driver, 7)
+    try:
+        waitS.until(EC.visibility_of_element_located((By.CSS_SELECTOR, "[data-test-id=convo-compose-button]")))
+    except:
+        return driver, False
+
+    driver.execute_script("document.querySelector('[data-test-id=convo-compose-button]').click()")
+
+    set_cookies(driver)
+    set_codes(driver)
+
+    return driver, True
+    
+
+def main():
+    global driver, status_label, row, messages_left
+
+    # root = Tk()
+    # build_app(root)
+    # root.mainloop()
 
     if not input_ok:
         print("Invalid Input")
@@ -404,54 +500,69 @@ def main():
         script_dir = pathlib.Path().absolute()
         chrome_options.add_argument(f"user-data-dir={script_dir}/selenium")
 
-    driver = webdriver.Chrome(options=chrome_options)
-
-    driver.get("https://www.etsy.com/messages/sent")
-    wait = WebDriverWait(driver, 1800)
-    print("Loaded, Searching for button")
-    wait.until(EC.visibility_of_element_located((By.CSS_SELECTOR, "[data-test-id=convo-compose-button]")))
-
-    driver.execute_script("document.querySelector('[data-test-id=convo-compose-button]').click()")
-
-    set_cookies(driver)
-    set_codes(driver)
-
     try:
         with open("contacted_sellers.json") as file:
             contacted_sellers = json.load(file)
     except:
         contacted_sellers = []
     
+    driver = None
+    vpn_rotator = rotate_vpn()
     try:
         for seller in sellers:
             if seller in contacted_sellers:
                 print("Already Contacted", seller)
                 continue
+            if messages_left < 1:
+                print("Loop Next")
+                if driver:
+                    driver.quit()
+                # next(vpn_rotator)
+                print("Open Browser")
+                stat_ok = False
+                while stat_ok is False:
+                    next(vpn_rotator)
+                    driver, stat_ok = open_browser(chrome_options)
+                    if not stat_ok:
+                        driver.quit()
+                messages_left = max_session_msg
+
             while not is_captcha_solved(driver):
                 if not is_browser_open(driver):
                     print("Browser Closed")
                     return
-
-            # resp, captcha_code = sendMsg(seller, message)
-            resp = None
-            captcha_code, gresp = get_captcha(driver)
+                time.sleep(0.1)
+            
+            print("Sending Message")
+            resp, captcha_code = sendMsg(seller, message)
+            # resp = None
+            # captcha_code, gresp = get_captcha(driver)
             if resp and resp.status_code == 201:
                 print("Message sent successfully to", seller)
-                contacted_sellers.add(seller)
+                contacted_sellers.append(seller)
+                messages_left -= 1
             else:
                 print("Resp", resp)
                 if resp is not None:
                     if resp.status_code == 200:
                         print("Rate Limit HIT")
+                        messages_left = 1
                     print("Content", resp.content)
                 print("Failed To Send Message To", seller)
-            # captcha_code, gresp = get_captcha(driver)
-            time.sleep(sleep_time)
+
+                messages_left -= 1
+
+            # time.sleep(sleep_time)
             if captcha_code and captcha_code.strip():
                 reset_captcha(driver, captcha_code)
     finally:
         with open("contacted_sellers.json", "w") as file:
             json.dump(contacted_sellers, file, indent=2)
+
+        if driver:
+            driver.quit()
+        kill_all_vpns()
+        subprocess.call(['stty', 'echo'])
 
 
 if __name__ == "__main__":
