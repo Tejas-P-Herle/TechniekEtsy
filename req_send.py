@@ -252,11 +252,14 @@ def main():
     print("Sellers", sellers)
     
     chrome_options = Options()
-    if sys.platform == "linux":
+    if "linux" in sys.platform:
         chrome_options.add_argument("user-data-dir=selenium")
-    else:
+    elif "win32" in sys.platform:
         script_dir = pathlib.Path().absolute()
         chrome_options.add_argument(f"user-data-dir={script_dir}\\selenium")
+    else:
+        script_dir = pathlib.Path().absolute()
+        chrome_options.add_argument(f"user-data-dir={script_dir}/selenium")
 
     driver = webdriver.Chrome(options=chrome_options)
 
