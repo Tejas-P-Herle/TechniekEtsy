@@ -3,7 +3,9 @@
 import openpyxl
 import time
 
-from tkinter import Tk
+from tkinter import *
+from os import path
+from tkinter.filedialog import askopenfilename
 
 import requests
 import grequests
@@ -22,26 +24,35 @@ from selenium.webdriver.chrome.options import Options
 cookies = {}
 csrf_token = ""
 page_guid = ""
+
 # filepath = "sellers_names.xlsx"
-filepath = input("Filepath(sellers_names.xlsx): ")
-if not filepath.strip():
-    filepath = "sellers_names.xlsx"
+# filepath = input("Filepath(sellers_names.xlsx): ")
+# if not filepath.strip():
+#     filepath = "sellers_names.xlsx"
+# 
+# message_file = input("Message File(Default Message - 'Hi'): ")
+# if not message_file.strip():
+#     message = "HI"
+# else:
+#     with open(message_file) as file:
+#         message = file.read()
+# 
+# message = message.replace('"', '\\"').replace("'", "\\'")
+# print("Message", message)
+# num_msg = 20
+filepath = ""
+message = "HI"
 
-message_file = input("Message File(Default Message - 'Hi'): ")
-if not message_file.strip():
-    message = "HI"
-else:
-    with open(message_file) as file:
-        message = file.read()
 
-message = message.replace('"', '\\"').replace("'", "\\'")
-print("Message", message)
-
-num_msg = 20
 batch_size = 30
 TIMEOUT=20
 
 sleep_time = 0
+row = 0
+
+input_ok = False
+
+contacted_sellers = set()
 
 
 def set_cookies(driver):
@@ -232,17 +243,149 @@ def get_sellers(sheet_obj):
         sellers.append(seller)
         i += 1
     return sellers
-  
+
+
+def add_label(root, label_text, column=0, same_row=False, font=None, **kwargs):
+    global row
+    
+    label = Label(root, text=label_text, font=font)
+    label.grid(row=row, column=column, **kwargs)
+    row += not same_row
+
+    return label
+
+def add_entry(root, width=40, column=0, padx=5, same_row=False,
+              num_only=False, default=None, show=None, **kwargs):
+    global row
+
+    vcmd = None
+    if num_only:
+        vcmd = (root.register(validate),
+                        '%d', '%i', '%P', '%s', '%S', '%v', '%V', '%W')
+    entry = Entry(root, width=width, validate = 'key', show=show,
+        validatecommand=vcmd)
+    if default is not None:
+        entry.insert(END, str(default))
+
+    entry.grid(row=row, column=column, padx=padx, **kwargs)
+    row += not same_row
+
+    return entry
+
+def add_button(root, btn_text, command, column=1,
+               same_row=False, **kwargs):
+    global row
+    button = Button(root, text=btn_text, command=command)
+    button.grid(row=row-1, column=column, sticky="nesw", **kwargs)
+    row += not same_row
+
+    return button
+
+def add_text(root, height=5, width=52, column=0, columnspan=2,
+             padx=5, pady=5, same_row=False, **kwargs):
+    global row
+    text = Text(root, height=height, width=width)
+    text.grid(row=row, column=column, columnspan=columnspan,
+              padx=padx, pady=pady)
+    row += not same_row
+
+    return text
+
+def validate(action, index, value_if_allowed,
+                   prior_value, text, validation_type, trigger_type, widget_name):
+    if value_if_allowed:
+        try:
+            int(value_if_allowed)
+            return True
+        except ValueError:
+            return False
+    else:
+        return True
+
+
+def setExcelFile(excelFileInput):
+    excelFilePath = askopenfilename(filetypes=[("Excel files", ".xlsx .xls")])
+    excelFileInput.delete(0,END)
+    excelFileInput.insert(0,excelFilePath)
+
+
+def start_sending(root, input_fields):
+    global status_label, input_ok, filepath, message, num_msg
+
+    def getValue(widget):
+        if isinstance(widget, Text):
+            text = widget.get("1.0", END)
+            text = text.strip().replace("\n", "\\n").replace("\t", "\\t")
+            return text
+        else:
+            val = widget.get()
+            if val.isdigit():
+                return int(val)
+            elif val.isdecimal():
+                return float(val)
+            return val
+    status_label.config(text="Status: Sending Messages")
+    input_values = {field_name: getValue(widget)
+        for field_name, widget in input_fields.items()}
+    print("input_values", input_values)
+    
+    if not input_values["num_msg"]:
+        input_values["num_msg"] = 100
+
+    if not input_values["filepath"] or not path.exists(input_values["filepath"]):
+        status_label.config(text="Status: Invalid filepath")
+        print("Invalid FilePath")
+        return
+
+    if not input_values["msg_template"]:
+        status_label.config(text="Status: Empty Message")
+        print("Empty Message")
+        return
+
+    filepath = input_values["filepath"]
+    message = input_values["msg_template"].replace('"', '\\"').replace("'", "\\'")
+    num_msg = input_values["num_msg"]
+    
+    input_ok = True
+    root.destroy()
 
 
 def main():
-    global driver
+    global driver, status_label, row
 
-    # proxies = get_working_proxies()
-    # root = Tk()
-    # self.master.title("Techneik Etsy Messenger")
+    root = Tk()
+    root.title("Techneik Etsy Messenger")
+    
+    heading_label = add_label(root, "Etsy Auto-Messenger", columnspan=2, font=24)
+    status_label = add_label(root, "Status: Loaded", columnspan=2)
 
-    # root.mainloop()
+    col1_ewidth = 16
+    sel_label = add_label(root, "Select Excel File:")
+    filepath_entry = add_entry(root)
+    load_button = add_button(root, "Select", lambda: setExcelFile(filepath_entry))
+    msg_label = add_label(root, "Enter Message:", columnspan=2)
+    
+    message_box = add_text(root)
+
+    start_label = add_label(root, "Starting Seller Offset", same_row=True)
+    num_label = add_label(root, "Number of Messages", same_row=True)
+    num_msg_entry = add_entry(root, width=col1_ewidth, column=1,
+        num_only=True, default=3)
+
+    input_fields = {'filepath': filepath_entry,
+        'msg_template': message_box, 'num_msg': num_msg_entry}
+
+    row += 1
+    send_msg_btn = add_button(root, "Send Messages",
+        lambda: start_sending(root, input_fields),
+        column=0, columnspan=2, padx=5, pady=5)
+
+
+    root.mainloop()
+
+    if not input_ok:
+        print("Invalid Input")
+        return
 
     wb_obj = openpyxl.load_workbook(filepath)
     sheet_obj = wb_obj.active
@@ -272,26 +415,43 @@ def main():
 
     set_cookies(driver)
     set_codes(driver)
-    
-    for seller in sellers:
-        while not is_captcha_solved(driver):
-            if not is_browser_open(driver):
-                print("Browser Closed")
-                return
 
-        resp, captcha_code = sendMsg(seller, message)
-        if resp and resp.status_code == 201:
-            print("Message sent successfully to", seller)
-        else:
-            print("Resp", resp)
-            if resp is not None:
-                if resp.status_code == 200:
-                    print("Rate Limit HIT")
-                print("Content", resp.content)
-        # captcha_code, gresp = get_captcha(driver)
-        time.sleep(sleep_time)
-        if captcha_code and captcha_code.strip():
-            reset_captcha(driver, captcha_code)
+    try:
+        with open("contacted_sellers.json") as file:
+            contacted_sellers = json.load(file)
+    except:
+        contacted_sellers = []
+    
+    try:
+        for seller in sellers:
+            if seller in contacted_sellers:
+                print("Already Contacted", seller)
+                continue
+            while not is_captcha_solved(driver):
+                if not is_browser_open(driver):
+                    print("Browser Closed")
+                    return
+
+            # resp, captcha_code = sendMsg(seller, message)
+            resp = None
+            captcha_code, gresp = get_captcha(driver)
+            if resp and resp.status_code == 201:
+                print("Message sent successfully to", seller)
+                contacted_sellers.add(seller)
+            else:
+                print("Resp", resp)
+                if resp is not None:
+                    if resp.status_code == 200:
+                        print("Rate Limit HIT")
+                    print("Content", resp.content)
+                print("Failed To Send Message To", seller)
+            # captcha_code, gresp = get_captcha(driver)
+            time.sleep(sleep_time)
+            if captcha_code and captcha_code.strip():
+                reset_captcha(driver, captcha_code)
+    finally:
+        with open("contacted_sellers.json", "w") as file:
+            json.dump(contacted_sellers, file, indent=2)
 
 
 if __name__ == "__main__":
